@@ -1,95 +1,67 @@
 from django.shortcuts import render
-from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+
 from .models import Intern, Report
 import json
 
+@csrf_exempt
+def interns(request):
+    if request.method == "GET":
+        data = list(Intern.objects.values())
+        return JsonResponse(data, safe=False)
+
+    elif request.method == "POST":
+        body = json.loads(request.body)
+        intern = Intern.objects.create(
+            name=body.get("name"),
+            department=body.get("department"),
+        )
+        return JsonResponse({
+            "id": intern.id,
+            "message": "Intern created"
+        })
+# GET all reports
+@csrf_exempt
 def report_list(request):
-    data = [
-        {"id": 1, "name": "Report 1"},
-        {"id": 2, "name": "Report 2"},
-    ]
-    return JsonResponse(data, safe=False)
+    if request.method == "GET":
+        reports = Report.objects.all()
 
-def report_detail(request, intern_id):
-    # Dummy example
-    data = {"id": intern_id, "name": f"Report {intern_id}"}
-    return JsonResponse(data)
+        data = [
+            {
+                "id": r.id,
+                "title": r.title,
+                "intern": r.intern.name,
+                "department": r.intern.department,
+                "file": r.pdf_file.url if r.pdf_file else None,
+                "uploaded_at": r.uploaded_at
+            }
+            for r in reports
+        ]
 
-# List reports of an intern
-def list_reports(request, intern_id):
-    reports = Report.objects.filter(intern_id=intern_id)
-    data = [{"id": r.id, "title": r.title, "uploaded_at": r.uploaded_at.isoformat()} for r in reports]
-    return JsonResponse(data, safe=False)
-
-# Upload report
+        return JsonResponse(data, safe=False)
+# POST new report
 @csrf_exempt
 def upload_report(request):
     if request.method == "POST":
-        intern_id = request.POST.get("intern_id")
         title = request.POST.get("title")
-        pdf_file = request.FILES.get("pdf_file")
-        report = Report.objects.create(intern_id=intern_id, title=title, pdf_file=pdf_file)
-        return JsonResponse({"status": "success", "report_id": report.id})
-    return JsonResponse({"error": "POST method required"}, status=400)
+        intern_id = request.POST.get("intern")
+        file = request.FILES.get("pdf_file")
 
-"""
-    # views.py at 8001
-from django.http import JsonResponse
-from .models import Report
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from .models import Intern, Report
+        if not title or not intern_id:
+            return JsonResponse({"error": "Missing fields"}, status=400)
 
-@csrf_exempt
-def upload_report(request):
-    if request.method == "POST":
-        intern_id = request.POST.get("intern_id")
-        title = request.POST.get("title")
-        pdf_file = request.FILES.get("pdf_file")
-
-        try:
-            intern = Intern.objects.get(id=intern_id)
-        except Intern.DoesNotExist:
-            return JsonResponse({"error": "Intern not found"}, status=404)
-
-        report = Report.objects.create(intern=intern, title=title, pdf_file=pdf_file)
-        return JsonResponse({"message": f"Report uploaded by {intern.name}", "report_id": report.id})
-
-def list_reports(request, intern_id):
-    try:
         intern = Intern.objects.get(id=intern_id)
-    except Intern.DoesNotExist:
-        return JsonResponse({"error": "Intern not found"}, status=404)
 
-    reports = intern.reports.all()
-    data = [{"title": r.title, "file": r.pdf_file.url, "uploaded_at": r.uploaded_at} for r in reports]
+        report = Report.objects.create(
+            title=title,
+            intern=intern,
+            pdf_file=file
+        )
 
-    return JsonResponse({
-        "intern": intern.name,
-        "total_reports": len(data),
-        "reports": data
-    })
+        return JsonResponse({
+            "id": report.id,
+            "message": "Uploaded successfully"
+        })
 
-
-# Create your views here.
-
-def report(request):
-    return JsonResponse({
-    "report": "connection initialized",
-    "time": str(datetime.datetime.now())
-})
-
-# reporting_app/views.py
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import json
-
-@csrf_exempt
-def create_report(request):
-    body = json.loads(request.body) if request.body else {}
-    return JsonResponse({
-        "status": "success",
-        "message": "Report created in dummy system",
-        "data_received": body
-    })"""
+    return JsonResponse({"error": "Only POST allowed"}, status=405)
